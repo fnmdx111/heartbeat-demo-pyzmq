@@ -51,19 +51,20 @@ while True:
                 info_('no nodes alive')
 
             for node in payload:
-
                 info_('attempting %s', node)
 
-                _s = ctx.socket(zmq.PUSH)
-                _s.connect(node)
-                debug_('connected to %s', node)
+                _s = ctx.socket(zmq.PAIR)
+                _port = _s.bind_to_random_port('tcp://%s' % get_local_ip())
+                poller.register(_s, zmq.POLLIN)
 
-                _s.send_json(msg_('heartbeat'))
+                inst_socket = ctx.socket(zmq.PUSH)
+                inst_socket.connect(node)
+                inst_socket.send_json(msg_('heartbeat', port=_port))
                 debug_('sent heartbeat')
-                _s.close()
+                inst_socket.close()
 
                 if poller.poll(3 * 1000):
-                    ret = msg_sck.recv_json()
+                    ret = _s.recv_json()
                     if ret['act'] == 'ret':
                         status, payload = unpack_ret(ret)
                         debug_(payload)
@@ -76,5 +77,8 @@ while True:
 
                 warning_('%s %s', node, 'down')
                 master_sck.send_json(msg_('down', addr=node))
+
+                poller.unregister(_s)
+                _s.close()
 
     sleep(5)

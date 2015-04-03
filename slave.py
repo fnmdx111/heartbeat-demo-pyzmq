@@ -3,6 +3,8 @@ import sys
 import utils
 import multiprocessing
 import subprocess
+import time
+import random
 
 msg_ = utils.msg
 unpack_ret = utils.unpack_ret
@@ -32,9 +34,6 @@ task_sck = ctx.socket(zmq.PULL)
 port = port or task_sck.bind_to_random_port('tcp://%s' % local_ip)
 debug_('bound successfully to %s:%s', local_ip, port)
 
-hd_sck = ctx.socket(zmq.PUSH)
-hd_sck.connect('tcp://%s:21557' % HEARTBEAT_DAEMON_IP)
-debug_('connected to heartbeat daemon')
 
 master_sck = ctx.socket(zmq.PUSH)
 master_sck.connect('tcp://%s' % master_ip_port)
@@ -53,6 +52,10 @@ while True:
     act = task['act']
 
     if act == 'heartbeat':
+        time.sleep(random.randint(0, 2))
+
+        hd_sck = ctx.socket(zmq.PAIR)
+        hd_sck.connect('tcp://192.168.1.112:%s' % task['port'])
         hd_sck.send_json(msg_('ret',
                               status='ok',
                               payload={'addr': 'tcp://%s:%s' % (local_ip,

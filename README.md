@@ -34,10 +34,10 @@ socket and sends `judge ret` message packet. Thus a job is done by now.
 Finally, when a slave node is on (i.e. `slave.py` is executed, and it does not
 care whether there are multiple instances of `slave.py`), it will send an `up`
 message packet to the master node, notifying it being online. Slave nodes open on
-random port a PULL-typed socket for tasks receiving uses, two PUSH-typed sockets
-for master and heartbeat communication. Once the master node receives the `up`
-message packet, it connects to the PULL-typed socket and save the connected
-socket to another table for future uses.
+random port a PULL-typed socket for tasks receiving uses, one PUSH-typed socket
+for master communication. Once the master node receives the `up` message packet,
+it connects to the PULL-typed socket and save the connected socket to another
+table for future uses.
 
 On job arriving, the slave node selected uses a process pool to call
 asynchronizedly `judge_all.exe` (i.e. actually doing the judge task). When a job
@@ -45,3 +45,13 @@ is done on a slave node, it notifies the result by directly connecting to the
 task initiator (whose address is given in the `judge` message packet), and sends
 the result as a `judge ret` message packet or a `judge ret error` if anything
 goes wrong.
+
+
+Possible Problems
+----
+
+The problem I am now concerned about is what happens when a task is delivered
+to a node, which, at that exact moment, went down.
+
+Possible solution: check the aliveness of the node selected before actually
+delivering the task; however, this may not turn out useful

@@ -17,7 +17,6 @@ from utils import msg as msg_, get_local_ip, MASTER_IP
 
 
 local_ip = get_local_ip()
-master_ip = '192.168.1.102'
 
 if __name__ == '__main__':
     ctx = zmq.Context()
@@ -30,10 +29,10 @@ if __name__ == '__main__':
     print('connected to tcp://%s:%s' % (MASTER_IP, 5555))
 
     master_sck.send_json(msg_(act='judge',
-                         args={'l': l, 'u': u, 's': s, 'n': n,
-                               'D': D, 'd': d, 't': t, 'm': m,
-                               'o': o, 'S': S, 'c': c, 'p': p},
-                         addr='tcp://%s:%s' % (local_ip, port)))
+                              args={'l': l, 'u': u, 's': s, 'n': n,
+                                    'D': D, 'd': d, 't': t, 'm': m,
+                                    'o': o, 'S': S, 'c': c, 'p': p},
+                              addr='tcp://%s:%s' % (local_ip, port)))
 
     ret = sck.recv_json()
 
