@@ -1,4 +1,3 @@
-import logging
 from utils import logger
 
 logger = logger()
@@ -13,17 +12,17 @@ port = 21557
 
 import zmq
 from time import sleep
-from utils import msg as msg_, unpack_ret
+from utils import msg as msg_, unpack_ret, MASTER_IP, get_local_ip
 
 ctx = zmq.Context()
 
 msg_sck = ctx.socket(zmq.PULL)
 msg_sck.setsockopt(zmq.RCVTIMEO, 3000)
-msg_sck.bind('tcp://192.168.1.102:21557')
+msg_sck.bind('tcp://%s:21557' % get_local_ip())
 debug_('bound to %s successfully', port)
 
 master_sck = ctx.socket(zmq.PUSH)
-master_sck.connect('tcp://192.168.1.102:5555')
+master_sck.connect('tcp://%s:5555' % MASTER_IP)
 
 poller = zmq.Poller()
 poller.register(msg_sck, zmq.POLLIN)

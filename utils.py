@@ -2,6 +2,7 @@
 import socket
 import logging
 
+
 def get_local_ip():
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     s.connect(('8.8.8.8', 80))
@@ -10,6 +11,10 @@ def get_local_ip():
     s.close()
     return ret
 
+
+# debug only
+MASTER_IP = get_local_ip()
+HEARTBEAT_DAEMON_IP = get_local_ip()
 
 def msg(act, **d):
     ret = {'act': act}

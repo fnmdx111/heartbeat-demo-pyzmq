@@ -1,5 +1,6 @@
 import sys
-from utils import msg as msg_, logger
+from utils import msg as msg_, logger, MASTER_IP
+import random as rd
 
 try:
     port = sys.argv[2]
@@ -25,7 +26,7 @@ cmd_sck.bind('tcp://*:%s' % port)
 debug_('bound to %s successful' % port)
 
 hd_sck = ctx.socket(zmq.PUSH)
-hd_sck.connect('tcp://192.168.1.102:21557')
+hd_sck.connect('tcp://%s:21557' % MASTER_IP)
 
 nodes = {}
 nodes_sockets = {}
@@ -49,7 +50,27 @@ while True:
         info_('listing nodes %s', nodes)
         hd_sck.send_json(msg_('ret', status='list nodes ok', payload=nodes))
 
+    elif action == 'judge':
+        if not nodes:
+            error_('all nodes down, we\'ve got no one to assign work to')
+            initiator_sck = ctx.socket(zmq.PAIR)
+            initiator_sck.connect(msg['addr'])
+            initiator_sck.send_json(msg_(act='judge ret error',
+                                         result='no living nodes'))
+            initiator_sck.close()
+
+            continue
+
+        distribution_target = rd.choice(list(nodes.keys()))
+        info_('judge task received, distributing to %s', distribution_target)
+        nodes_sockets[distribution_target].send_json(
+            msg_(act='judge', args=msg['args'], addr=msg['addr'])
+        )
+
     elif action == 'down':
         addr = msg['addr']
-        del nodes[addr]
-        nodes_sockets[addr].close()
+        if addr in nodes:
+            del nodes[addr]
+        if addr in nodes_sockets:
+            nodes_sockets[addr].close()
+            del nodes_sockets[addr]
