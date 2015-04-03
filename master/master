@@ -1,0 +1,124 @@
+#! /usr/bin/python3
+
+import sys
+from utils import msg as msg_, logger, get_local_ip, unpack_ret
+import random as rd
+from config import HEARTBEAT_DAEMON_MESSAGE_ADDR, MASTER_PORT
+import uuid
+import time
+
+
+try:
+    port = int(sys.argv[2])
+except (IndexError, ValueError):
+    port = MASTER_PORT
+
+try:
+    strict = bool(sys.argv[3])
+except IndexError:
+    strict = False
+
+logger = logger()
+
+debug_ = logger.debug
+info_ = logger.info
+warning_ = logger.warning
+critical_ = logger.critical
+error_ = logger.error
+
+local_ip = get_local_ip()
+
+
+import zmq
+
+ctx = zmq.Context()
+
+command_socket = ctx.socket(zmq.PULL)
+
+command_socket.bind('tcp://*:%s' % port)
+debug_('bound to %s successful' % port)
+
+
+def list_nodes(c):
+    sck = c.socket(zmq.REQ)
+    sck.connect(HEARTBEAT_DAEMON_MESSAGE_ADDR)
+    sck.send_json(msg_(act='list nodes'))
+
+    msg = sck.recv_json()
+    if msg['act'] == 'nodes update':
+        return msg['payload']
+
+    return {}
+
+
+poller = zmq.Poller()
+
+node_table = {}
+
+def mainloop(nodes):
+    while True:
+        msg = command_socket.recv_json()
+
+        assert 'act' in msg
+        action = msg['act']
+
+        if action == 'nodes update':
+            nodes.clear()
+            nodes.update(msg['payload'])
+            debug_('new node table %s', nodes)
+        elif action == 'judge':
+            if not nodes:
+                error_('all nodes down, we\'ve got no one to assign work to')
+                initiator_sck = ctx.socket(zmq.PAIR)
+                initiator_sck.connect(msg['addr'])
+                initiator_sck.send_json(msg_(act='judge ret error',
+                                             result='no living nodes'))
+                initiator_sck.close()
+
+                continue
+
+            while True:
+                distribution_target = rd.choice(list(nodes.keys()))
+                rd_key = str(uuid.uuid4())
+                info_('judge task received, distributing to %s',
+                      distribution_target)
+                ns = ctx.socket(zmq.PUSH)
+                ns.connect(distribution_target)
+
+                ack_socket = ctx.socket(zmq.PAIR)
+                ack_port = ack_socket.bind_to_random_port('tcp://%s' % local_ip)
+
+                poller.register(ns, zmq.POLLOUT)
+                poller.register(ack_socket, zmq.POLLIN)
+
+                if poller.poll(3 * 1000):
+                    ns.send_json(msg_(act='judge',
+                                      args=msg['args'],
+                                      rd_key=rd_key,
+                                      ack_port=ack_port,
+                                      addr=msg['addr']))
+                    ack = ack_socket.recv_json()
+
+                    if ack['act'] == 'ack':
+                        if ack['rd_key'] == rd_key:
+                            # ok
+                            poller.unregister(ns)
+                            poller.unregister(ack_socket)
+                            break
+
+                    poller.unregister(ns)
+                    poller.unregister(ack_socket)
+                    continue
+                else:
+                    # ns send timeout
+                    poller.unregister(ns)
+                    poller.unregister(ack_socket)
+                    continue
+
+        else:
+            if strict:
+                error_('incomprehensible action received, master going down!!!')
+
+
+if __name__ == '__main__':
+    mainloop(node_table)

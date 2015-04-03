@@ -1,6 +1,4 @@
-
 import socket
-import logging
 
 
 def get_local_ip():
@@ -11,10 +9,6 @@ def get_local_ip():
     s.close()
     return ret
 
-
-# debug only
-MASTER_IP = get_local_ip()
-HEARTBEAT_DAEMON_IP = get_local_ip()
 
 def msg(act, **d):
     ret = {'act': act}
@@ -30,12 +24,12 @@ def unpack_ret(m):
         return m
 
 
+import logging
+
+
 def logger():
     logging.basicConfig(level=logging.DEBUG,
                         format='%(levelname)s:%(asctime)s:%(filename)s: '
                                '%(message)s')
     return logging.getLogger(__name__)
 
-
-if __name__ == '__main__':
-    print(get_local_ip())

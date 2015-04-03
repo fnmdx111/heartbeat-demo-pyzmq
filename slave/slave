@@ -1,16 +1,14 @@
+#! /usr/bin/python3
 
 import sys
-import utils
+from utils import msg as msg_, unpack_ret, logger, get_local_ip
+from config import MASTER_ADDR, HEARTBEAT_DAEMON_ADDR,\
+                   HEARTBEAT_DAEMON_IP, MASTER_IP, HEARTBEAT_INTERVAL
 import multiprocessing
 import subprocess
 import time
-import random
 
-msg_ = utils.msg
-unpack_ret = utils.unpack_ret
-logger = utils.logger()
-MASTER_IP = utils.MASTER_IP
-HEARTBEAT_DAEMON_IP = utils.HEARTBEAT_DAEMON_IP
+logger = logger()
 
 debug_ = logger.debug
 info_ = logger.info
@@ -18,54 +16,57 @@ warning_ = logger.warning
 critical_ = logger.critical
 error_ = logger.error
 
-master_ip_port = '%s:5555' % MASTER_IP
 
 try:
     port = sys.argv[2]
 except IndexError:
     port = None
 
-local_ip = utils.get_local_ip()
+local_ip = get_local_ip()
 
 import zmq
 ctx = zmq.Context()
 
-task_sck = ctx.socket(zmq.PULL)
-port = port or task_sck.bind_to_random_port('tcp://%s' % local_ip)
-debug_('bound successfully to %s:%s', local_ip, port)
+task_socket = ctx.socket(zmq.PULL)
+port = port or task_socket.bind_to_random_port('tcp://%s' % local_ip)
+debug_('bound successfully to tcp://%s:%s', local_ip, port)
+
+master_socket = ctx.socket(zmq.PUSH)
+master_socket.connect(MASTER_ADDR)
+debug_('connect to master successfully')
 
 
-master_sck = ctx.socket(zmq.PUSH)
-master_sck.connect('tcp://%s' % master_ip_port)
-debug_('connected to master successful')
-master_sck.send_json(msg_('up', addr='tcp://%s:%s' % (local_ip, port)))
-info_('send up successful')
+def heartbeat_daemon():
+    hbd_ctx = zmq.Context()
+    hbd_socket = hbd_ctx.socket(zmq.PUB)
+    hbd_socket.connect(HEARTBEAT_DAEMON_ADDR)
+
+    while True:
+        time.sleep(HEARTBEAT_INTERVAL)
+        hbd_socket.send_json(msg_(act='heartbeat',
+                                  addr='tcp://%s:%s' % (local_ip, port),
+                                  msg='<3'))
+
+multiprocessing.Process(target=heartbeat_daemon, daemon=True).start()
+info_('heartbeat daemon up')
+
 
 def target(args):
     return subprocess.check_output(['./test'])
 
+
 pool = multiprocessing.Pool(maxtasksperchild=15)
 while True:
-    task = task_sck.recv_json()
+    task = task_socket.recv_json()
 
     assert 'act' in task
     act = task['act']
 
-    if act == 'heartbeat':
-        time.sleep(random.randint(0, 2))
-
-        hd_sck = ctx.socket(zmq.PAIR)
-        hd_sck.connect('tcp://192.168.1.112:%s' % task['port'])
-        hd_sck.send_json(msg_('ret',
-                              status='ok',
-                              payload={'addr': 'tcp://%s:%s' % (local_ip,
-                                                                port),
-                                       'msg': '<3'}))
-        debug_('heartbeat at %s:%s', local_ip, port)
-    elif act == 'ret':
+    if act == 'ret':
         status, payload = unpack_ret(task)
         if task['status'] == 'ok':
             info_('master responsed %s', payload)
+
     elif act == 'judge':
         info_('judge task received')
 
@@ -80,7 +81,8 @@ while True:
             initiator_sck = ctx.socket(zmq.PAIR)
             initiator_sck.connect(initiator_addr)
             initiator_sck.send_json(msg_(act='judge ret',
-                                         result=str(result)))
+                                         target=task['addr'],
+                                         result=str(result, encoding='ascii')))
             initiator_sck.close()
 
         def error_callback(error_result):
