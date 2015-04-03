@@ -72,6 +72,10 @@ while True:
         args = task['args']
         initiator_addr = task['addr']
 
+        _s = ctx.socket(zmq.PAIR)
+        _s.connect('tcp://%s:%s' % (MASTER_IP, task['ack_port']))
+        _s.send_json(msg_(act='ack', rd_key=task['rd_key']))
+
         def callback(result):
             initiator_sck = ctx.socket(zmq.PAIR)
             initiator_sck.connect(initiator_addr)

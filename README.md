@@ -53,5 +53,5 @@ Possible Problems
 The problem I am now concerned about is what happens when a task is delivered
 to a node, which, at that exact moment, went down.
 
-Possible solution: check the aliveness of the node selected before actually
-delivering the task; however, this may not turn out useful
+Possible solution: make the slave nodes reply with `ack` message packet to master
+to ensure that the slave has got the job.
