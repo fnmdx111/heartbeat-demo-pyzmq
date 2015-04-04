@@ -8,3 +8,5 @@ HEARTBEAT_DAEMON_ADDR = 'tcp://%s:%s' % (HEARTBEAT_DAEMON_IP,
                                          HEARTBEAT_DAEMON_PORT)
 
 HEARTBEAT_INTERVAL = 10
+
+LANGS_CONF_DIR = './conf'

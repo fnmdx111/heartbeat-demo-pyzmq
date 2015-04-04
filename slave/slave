@@ -1,12 +1,18 @@
 #! /usr/bin/python3
 
 import sys
-from utils import msg as msg_, unpack_ret, logger, get_local_ip
+from utils import msg as msg_, unpack_ret, logger, get_local_ip, ack_gen,\
+                  flat_b64extract
 from config import MASTER_ADDR, HEARTBEAT_DAEMON_ADDR,\
-                   HEARTBEAT_DAEMON_IP, MASTER_IP, HEARTBEAT_INTERVAL
+                   HEARTBEAT_DAEMON_IP, MASTER_IP, HEARTBEAT_INTERVAL,\
+                   LANGS_CONF_DIR
 import multiprocessing
 import subprocess
 import time
+import base64
+import lzma
+import zipfile
+import io
 
 logger = logger()
 
@@ -26,6 +32,7 @@ local_ip = get_local_ip()
 
 import zmq
 ctx = zmq.Context()
+ack = ack_gen(ctx)
 
 task_socket = ctx.socket(zmq.PULL)
 port = port or task_socket.bind_to_random_port('tcp://%s' % local_ip)
@@ -58,24 +65,19 @@ def target(args):
 pool = multiprocessing.Pool(maxtasksperchild=15)
 while True:
     task = task_socket.recv_json()
+    debug_('new task %s', task['act'])
 
     assert 'act' in task
     act = task['act']
 
-    if act == 'ret':
-        status, payload = unpack_ret(task)
-        if task['status'] == 'ok':
-            info_('master responsed %s', payload)
-
-    elif act == 'judge':
+    if act == 'judge':
         info_('judge task received')
 
         args = task['args']
         initiator_addr = task['addr']
 
-        _s = ctx.socket(zmq.PAIR)
-        _s.connect('tcp://%s:%s' % (MASTER_IP, task['ack_port']))
-        _s.send_json(msg_(act='ack', rd_key=task['rd_key']))
+        ack('tcp://%s:%s' % (MASTER_IP, task['ack_port']),
+            rd_key=task['rd_key'])
 
         def callback(result):
             initiator_sck = ctx.socket(zmq.PAIR)
@@ -95,6 +97,11 @@ while True:
         pool.apply_async(target, args=(args,),
                          callback=callback,
                          error_callback=error_callback)
+    elif act == 'conf update':
+        info_('updating conf')
 
+        flat_b64extract(task['payload'], LANGS_CONF_DIR)
+
+        ack(task['addr'])
     else:
         warning_('unable to act, message not understandable')
